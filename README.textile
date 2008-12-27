@@ -1,0 +1,53 @@
+h1. osxmail2maildir
+
+This simple program converts a "Mail.app":http://www.apple.com/macosx/features/mail/ 
+mail store into "Maildir":http://cr.yp.to/proto/maildir.html format.
+
+h2. Usage
+
+osxmail2maildir takes one required argument and one optional one. The first 
+argument (required) is the path into which osxmail2maildir should place all 
+of the resulting Maildir directories. The second, optional argument is the 
+location of the Mail.app mailstore. This is optional because it should be 
+$HOME/Library/Mail which is where the script looks by default.
+
+This code requires "Ruby":http://www.ruby-lang.org/ version 1.8.2 or greater.
+As such, it should run out of the box on Mac OS X Tiger or Leopard without
+modifications.
+
+Once the script is finished running, the target directory will contain one 
+or more Maildir directories with the converted messages from the Mail.app 
+mailstore. You can use any mail client capable of reading Maildir to view 
+the messages. Alternatively, you can drop the resultant files from the 
+Maildirs into existing Maildirs seamlessly; the script generates proper 
+Maildir filenames and this should therefore not produce any collisions.
+
+h2. License
+
+Copyright (c) 2005-2008, Toby DiPasquale
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without 
+modification, are permitted provided that the following conditions are met:
+
+  * Redistributions of source code must retain the above copyright notice, 
+    this list of conditions and the following disclaimer.
+  * Redistributions in binary form must reproduce the above copyright 
+    notice, this list of conditions and the following disclaimer in the 
+    documentation and/or other materials provided with the distribution.
+  * Neither the name of Toby DiPasquale nor the names of his contributors 
+    may be used to endorse or promote products derived from this software 
+    without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" 
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE 
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE 
+POSSIBILITY OF SUCH DAMAGE.
+

@@ -1,0 +1,234 @@
+#!/usr/bin/env ruby
+require "fileutils"
+require "socket"
+
+#
+# Copyright (c) 2005, Toby DiPasquale
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without 
+# modification, are permitted provided that the following conditions are met:
+#
+#   * Redistributions of source code must retain the above copyright notice, 
+#     this list of conditions and the following disclaimer.
+#   * Redistributions in binary form must reproduce the above copyright 
+#     notice, this list of conditions and the following disclaimer in the 
+#     documentation and/or other materials provided with the distribution.
+#   * Neither the name of Toby DiPasquale nor the names of his contributors 
+#     may be used to endorse or promote products derived from this software 
+#     without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" 
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE 
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE 
+# POSSIBILITY OF SUCH DAMAGE.
+#
+
+#
+# osxmail2maildir 
+#
+# Convert Mac OS X Mail.app mailstore to Maildir format
+#
+PROG_VER="0.1.0"
+
+#
+# usage - Print usage information and exit.
+#
+def usage
+    $stderr.puts "osxmail2maildir v#{PROG_VER}"
+    $stderr.puts "Copyright (c) 2005 Toby DiPasquale <toby@cbcg.net>"
+    $stderr.puts
+    $stderr.puts "usage: #{__FILE__} <target directory> [ <source directory> ]"
+    exit 1
+end
+
+#
+# traverse - Traverse a directory tree @dir, yielding entries that match
+#            a particular regular expression @expr to the associated
+#            code block.
+#
+def traverse( dir, expr=nil)
+    dirs = [ dir ]
+    until dirs.empty?
+        d = dirs.first
+	dirs.delete_at( 0)
+	Dir.entries( d).sort.each { |node|
+	    next if node == "." or node == ".."
+	    name = "#{d}/#{node}"
+	    dirs << name if File.lstat( name).directory?
+	    yield name if name =~ expr
+	}
+    end
+end
+
+#
+# new_maildir - Recursively create directories for a new Maildir mail store.
+#
+def new_maildir( target, source, name)
+    x = name.sub( /Messages$/, "").sub( /\.mbox\/?.*/, "")
+    x = x.sub( Regexp.new( source), "").sub( /^\//, "")
+    d = ""
+    x.split( "/").each do |comp|
+        d << "/" + comp.delete( " ")
+	unless FileTest.directory?( target + "/" + d)
+            FileUtils.mkdir( target + "/" + d)
+	end
+    end
+    new_d = target + "/" + d
+    FileUtils.mkdir( new_d + "/cur")
+    FileUtils.mkdir( new_d + "/new")
+    FileUtils.mkdir( new_d + "/tmp")
+    return new_d
+end
+
+#
+# set - Test a number against a bitmask to see if bits are set or cleared.
+#
+def set?( num, mask)
+    return true if (num & mask) != 0
+    return false
+end
+
+#
+# Got this off of jwz's blog in reference to what the bits in the flags 
+# parameter in Mail.app message files mean
+#
+# <snip>
+# Update: An anonymous benefactor has the goods:
+#
+#      0	read				1 << 0
+#      1	deleted				1 << 1
+#      2	answered			1 << 2
+#      3	encrypted			1 << 3
+#      4	flagged				1 << 4
+#      5	recent				1 << 5
+#      6	draft				1 << 6
+#      7	initial (no longer used)	1 << 7
+#      8	forwarded			1 << 8
+#      9	redirected			1 << 9
+#      10-15  	attachment count		3F << 10 (6 bits)
+#      16-22  	priority level			7F << 16 (7 bits)
+#      23	signed				1 << 23
+#      24	is junk				1 << 24
+#      25	is not junk			1 << 25
+#      26-28  	font size delta			7 << 26  (3 bits)
+#      29	junk mail level recorded     	1 << 29
+#      30	highlight text in toc		1 << 30
+#      31	(unused)
+#
+# Thank you Mask Man!
+# </snip>
+#
+# Also, see http://cr.yp.to/proto/maildir.html for information on
+# how to formulate a proper Maildir file name.
+#
+
+#
+# maildirname - Create a proper Maildir filename for this message.
+#
+def maildirname( deliveries, flags)
+    s = ""
+    s << Time.now.to_i.to_s
+    s << "."
+    s << "P" + Process.pid.to_s
+    s << "Q" + deliveries.to_s
+    s << "R" + rand( 2147483648).to_s
+    s << "."
+    s << Socket.gethostname.sub( /\//, "\\057").sub( /:/, "\\072")
+    
+    # if this is a new message, we don't add the third part of the
+    # file name (the colon and after)
+    return "/new/#{s}" unless set?( flags, 0x00000001)
+    
+    # this message is not unread, so we add the :2,... part to it
+    # based on the flags in the XML at the bottom of the original
+    # Mail.app message file
+    s << ":2,"
+    # draft (Mail.app: draft)
+    s << "D" if set?( flags, 0x00000040)
+    # flagged (Mail.app: flagged)
+    s << "F" if set?( flags, 0x00000010)
+    # passed (Mail.app: forwarded/redirected)
+    s << "P" if set?( flags, 0x00000100) or set?( flags, 0x00000200)
+    # replied (Mail.app: answered)
+    s << "R" if set?( flags, 0x00000004)
+    # seen (Mail.app: read)
+    s << "S"
+    # trashed (Mail.app: deleted)
+    s << "T" if set?( flags, 0x00000002)
+    return "/cur/#{s}"
+end
+
+#
+# main - Main processing logic.
+#
+def main
+    # check those arguments
+    usage if ARGV[0].nil?
+    target = ARGV[0].strip
+    maildir = "#{ENV['HOME']}/Library/Mail"
+    maildir = ARGV[1].strip unless ARGV[1].nil?
+    puts "Using source directory of '#{maildir}'..."
+    puts "Using target directory of '#{target}'..."
+    deliveries = 0
+    
+    # make the target directory
+    File.umask( 077)
+    FileUtils.mkdir( target)
+    
+    # for each dir in source dir matching /\.mbox$/ (recursive)
+    $stdout.sync = true
+    traverse( maildir, /\.mbox$/) do |dir|
+	d = "#{dir}/Messages"
+	next unless FileTest.directory?( d)
+	new_d = new_maildir( target, maildir, d)
+	
+        # for each filename matching /\.emlx$/
+	msgs = 0
+	Dir.entries( d).each do |file|
+            next unless file =~ /\.emlx$/
+	    msgs += 1
+	    
+            # load all lines of source file into array
+            lines = IO.readlines( "#{d}/#{file}")
+
+            # remove first line from array
+            lines.delete_at( 0)
+
+            # from the end of the array, look for "</plist>"; until we find
+            # the matching "<?xml...>" line, we drop each line from the 
+            # array
+            raise "Invalid file format" unless lines[-1] =~ /^<\/plist>/
+	    last = ""
+	    flags = 0
+	    lines.reverse_each do |line|
+	        break if last =~ /^<\?xml version="1.0" encoding="UTF-8"\?>/
+		if line =~ /<key>flags<\/key>/
+		    flags = last.sub( /<integer>/, "").sub( /<\/integer>.*/, "").to_i
+		end
+		last = lines[-1].dup
+		lines.delete_at( -1)
+            end
+	    
+            # open new Maildir-formatted filename in target dir ($TARGET)
+	    deliveries += 1
+	    n = maildirname( deliveries, flags)
+	    File.open( new_d + "/" + n, "w+") do |f|
+	        lines.each { |x| f.print x }
+            end
+
+	    print sprintf( "\r%s %d", "Converting #{dir}...", msgs)
+        end
+	puts unless msgs.zero?
+    end
+end
+
+main if __FILE__ == $0
+
